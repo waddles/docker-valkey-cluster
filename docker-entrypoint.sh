@@ -58,6 +58,7 @@ if [ "$1" = 'valkey-cluster' ]; then
       max_port=$(($max_port + $STANDALONE))
     fi
 
+    nodes=()
     for port in $(seq $INITIAL_PORT $max_port); do
       mkdir -p /valkey-conf/${port}
       mkdir -p /valkey-data/${port}
@@ -92,7 +93,7 @@ if [ "$1" = 'valkey-cluster' ]; then
       # choose template
       if [ "$port" -lt "$first_standalone" ]; then
         tmpl=/valkey-conf/valkey-cluster.tmpl
-        nodes="$nodes $IP:$port"
+        nodes+=("$IP:$port")
       else
         tmpl=/valkey-conf/valkey.tmpl
       fi
@@ -134,18 +135,18 @@ EOF
     #
     /valkey/src/valkey-cli --version | grep -E "valkey-cli 3.0|valkey-cli 3.2|valkey-cli 4.0"
 
-    CLI_ARGS=""
+    CLI_ARGS=() # Use an array to prevent command injection
     if [ ! -z "$VALKEY_PASSWORD" ]; then
-      CLI_ARGS="$CLI_ARGS -a '$VALKEY_PASSWORD'"
+        CLI_ARGS+=("-a" "$VALKEY_PASSWORD")
     fi
 
     if [ "$TLS_ENABLED" = "true" ]; then
-       # valkey-cli needs these flags to connect to the nodes we just spawned
-       CLI_ARGS="$CLI_ARGS --tls --cert $TLS_CERT_FILE --key $TLS_KEY_FILE --cacert $TLS_CA_CERT_FILE --insecure"
+        # valkey-cli needs these flags to connect to the nodes we just spawned
+        CLI_ARGS+=("--tls" "--cert" "$TLS_CERT_FILE" "--key" "$TLS_KEY_FILE" "--cacert" "$TLS_CA_CERT_FILE" "--insecure")
     fi
 
     echo "Using valkey-cli to create the cluster"
-    echo "yes" | valkey-cli --cluster create $nodes --cluster-replicas "$SLAVES_PER_MASTER" $CLI_ARGS
+    echo "yes" | valkey-cli --cluster create "${nodes[@]}" --cluster-replicas "$SLAVES_PER_MASTER" "${CLI_ARGS[@]}"
 
     if [ "$SENTINEL" = "true" ]; then
       for port in $(seq $INITIAL_PORT $(($INITIAL_PORT + $MASTERS))); do
